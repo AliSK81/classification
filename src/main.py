@@ -18,7 +18,6 @@ transform = transforms.Compose([
     transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))
 ])
 
-# choose the training and test datasets
 train_data = datasets.CIFAR10('data', train=True,
                               download=True, transform=transform)
 test_data = datasets.CIFAR10('data', train=False,
@@ -57,27 +56,41 @@ class Dense:
     def __init__(self, n_inputs, n_neurons):
         self.weights = np.random.randn(n_inputs, n_neurons)
         self.biases = np.zeros((1, n_neurons))
+        self.inputs = None
+        self.f_output = None
+        self.b_output = None
 
     def forward(self, inputs):
         self.inputs = inputs
-        self.output = np.dot(inputs, self.weights) + self.biases
+        self.f_output = np.dot(inputs, self.weights) + self.biases
 
     def backward(self, b_input):
-        self.b_weights = np.dot(self.inputs.T, b_input)
-        self.b_biases = np.sum(b_input, axis=0, keepdims=True)
+        b_input_reshaped = np.squeeze(b_input, axis=0)
+        inputs_reshaped = np.squeeze(self.inputs.T, axis=2)
+        self.weights = np.dot(inputs_reshaped, b_input_reshaped)
+        self.biases = np.sum(b_input, axis=0, keepdims=True)
         self.b_output = np.dot(b_input, self.weights.T)
 
 
 class ReLU:
+    def __init__(self):
+        self.b_output = None
+        self.inputs = None
+        self.f_output = None
+
     def forward(self, inputs):
         self.inputs = inputs
-        self.output = np.maximum(0, inputs)
+        self.f_output = np.maximum(0, inputs)
 
     def backward(self, b_input):
         self.b_output = b_input * (self.inputs > 0)
 
 
 class Sigmoid:
+    def __init__(self):
+        self.output = None
+        self.b_output = None
+
     def forward(self, inputs):
         self.output = 1 / (1 + np.exp(-inputs))
 
@@ -86,6 +99,10 @@ class Sigmoid:
 
 
 class Softmax:
+    def __init__(self):
+        self.output = None
+        self.b_output = None
+
     def forward(self, inputs):
         exp_vals = np.exp(inputs - np.max(inputs, axis=1, keepdims=True))
         self.output = exp_vals / np.sum(exp_vals, axis=1, keepdims=True)
@@ -95,15 +112,21 @@ class Softmax:
 
 
 class Categorical_Cross_Entropy_loss:
+    def __init__(self):
+        self.value = None
+        self.b_output = None
+
     def forward(self, softmax_output, class_label):
-        self.softmax_output = softmax_output
-        self.class_label = class_label
-        self.loss = -np.mean(np.log(self.softmax_output[np.arange(len(class_label)), class_label]))
+        softmax_output = np.clip(softmax_output, 1e-7, 1.0 - 1e-7)
+
+        num_samples = softmax_output.shape[0]
+        self.value = -np.sum(class_label * np.log(softmax_output)) / num_samples
 
     def backward(self, softmax_output, class_label):
-        self.b_output = softmax_output
-        self.b_output[np.arange(len(class_label)), class_label] -= 1
-        self.b_output /= len(class_label)
+        num_samples = softmax_output.shape[0]
+        grad_softmax = softmax_output - class_label
+        grad_softmax /= num_samples
+        self.b_output = grad_softmax
 
 
 class SGD:
@@ -111,8 +134,8 @@ class SGD:
         self.learning_rate = learning_rate
 
     def update(self, layer):
-        layer.weights -= self.learning_rate * layer.b_weights
-        layer.biases -= self.learning_rate * layer.b_biases
+        layer.weights -= self.learning_rate * layer.weights
+        layer.biases -= self.learning_rate * layer.biases
 
 
 feature_extractor = resnet34(pretrained=True)
@@ -124,25 +147,23 @@ Layer2 = Dense(20, 10)
 Act2 = Softmax()
 Loss = Categorical_Cross_Entropy_loss()
 Optimizer = SGD(learning_rate=0.001)
+num_classes = 10
+y_1hot = np.eye(num_classes)[y_train]
 
 # Main Loop of Training
 for epoch in range(20):
     # forward
     Layer1.forward(x_train)
-    Act1.forward(Layer1.output)
-    Layer2.forward(Act1.output)
-    Act2.forward(Layer2.output)
-
-    y_1hot = np.zeros((y_train.shape[0], 10))
-    y_1hot[np.arange(y_train.shape[0]), y_train] = 1
-
-    loss = Loss.forward(Act2.output, y_1hot)
+    Act1.forward(Layer1.f_output)
+    Layer2.forward(Act1.f_output)
+    Act2.forward(Layer2.f_output)
+    Loss.forward(Act2.output, y_1hot)
 
     # Report
     y_predict = np.argmax(Act2.output, axis=1)
     accuracy = np.mean(y_train == y_predict)
     print(f'Epoch:{epoch}')
-    print(f'Loss: {loss}')
+    print(f'Loss: {Loss.value}')
     print(f'Accuracy: {accuracy}')
     print('--------------------------')
 
@@ -165,6 +186,3 @@ plt.xlabel("Predicted")
 plt.ylabel("Actual")
 plt.title("Confusion Matrix for the training set")
 plt.show()
-
-# Confusion Matrix for the test set
-# TODO
