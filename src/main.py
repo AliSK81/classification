@@ -28,7 +28,7 @@ feature_extractor.fc = nn.Identity()
 
 class Dense:
     def __init__(self, n_inputs, n_neurons):
-        self.weights = np.random.randn(n_inputs, n_neurons) * np.sqrt(2 / n_inputs)
+        self.weights = np.random.randn(n_inputs, n_neurons) * 0.01
         self.biases = np.zeros((1, n_neurons))
 
     def forward(self, inputs):
@@ -47,33 +47,41 @@ class ReLU:
         self.output = np.maximum(0, inputs)
 
     def backward(self, b_input):
-        self.b_output = b_input.copy()
-        self.b_output[self.inputs <= 0] = 0
+        self.b_output = b_input * (self.inputs > 0).astype(int)
 
 
 class Softmax:
     def forward(self, inputs):
-        exp_values = np.exp(inputs - np.max(inputs, axis=1, keepdims=True))
-        probabilities = exp_values / np.sum(exp_values, axis=1, keepdims=True)
-        self.output = probabilities
+        exp_vals = np.exp(inputs - np.max(inputs, axis=1, keepdims=True))
+        self.output = exp_vals / np.sum(exp_vals, axis=1, keepdims=True)
+        return self.output
 
     def backward(self, b_input):
-        self.b_output = b_input.copy()
+        # self.b_output = b_input.copy()
+        batch_size = b_input.shape[0]
+        jacobian_matrix = np.zeros((batch_size, b_input.shape[1], b_input.shape[1]))
+        for i in range(batch_size):
+            for j in range(b_input.shape[1]):
+                for k in range(b_input.shape[1]):
+                    if j == k:
+                        jacobian_matrix[i][j][k] = self.output[i][j] * (1 - self.output[i][k])
+                    else:
+                        jacobian_matrix[i][j][k] = -self.output[i][j] * self.output[i][k]
+
+        self.b_output = np.matmul(b_input[:, np.newaxis, :], jacobian_matrix).squeeze()
 
 
 class CategoricalCrossEntropyLoss:
     def forward(self, softmax_output, class_label):
-        n_samples = len(softmax_output)
-        correct_class_probabilities = softmax_output[range(n_samples), class_label.argmax(axis=1)]
-        loss = -np.mean(np.log(correct_class_probabilities + 1e-7))
-        self.output = loss
-        return loss
+        batch_size = softmax_output.shape[0]
+        self.output = -np.sum(class_label * np.log(softmax_output + 1e-9)) / batch_size
+        return self.output
 
     def backward(self, softmax_output, class_label):
-        n_samples = len(softmax_output)
-        self.b_output = softmax_output.copy()
-        self.b_output[range(n_samples), class_label.argmax(axis=1)] -= 1
-        self.b_output /= n_samples
+        self.b_output = - class_label / softmax_output
+
+        # batch_size = softmax_output.shape[0]
+        # self.b_output = (softmax_output - class_label) / batch_size
 
 
 class SGD:
@@ -134,11 +142,33 @@ for epoch in range(20):
             Optimizer.update(Layer1)
             Optimizer.update(Layer2)
 
-# Confusion Matrix for the training set
-cm_train = confusion_matrix(y_train, y_predict)
+feature_extractor.eval()
+with torch.no_grad():
+    y_test_all = []
+    y_predict_all = []
+    for images, labels in test_loader:
+        features = feature_extractor(images)
+
+        x_test = features.numpy()
+        y_test = labels.numpy()
+
+        # forward
+        Layer1.forward(x_test)
+        Act1.forward(Layer1.output)
+        Layer2.forward(Act1.output)
+        Act2.forward(Layer2.output)
+
+        # Report
+        y_predict = np.argmax(Act2.output, axis=1)
+
+        y_test_all.extend(y_test)
+        y_predict_all.extend(y_predict)
+
+# Confusion Matrix for the testing set
+cm_test = confusion_matrix(y_test_all, y_predict_all)
 plt.subplots(figsize=(10, 6))
-sb.heatmap(cm_train, annot=True, fmt='g')
+sb.heatmap(cm_test, annot=True, fmt='g')
 plt.xlabel("Predicted")
 plt.ylabel("Actual")
-plt.title("Confusion Matrix for the training set")
+plt.title("Confusion Matrix for the testing set")
 plt.show()
