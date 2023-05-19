@@ -2,7 +2,7 @@ import random
 
 import numpy as np
 from torch import nn
-from torchvision.models import resnet18, resnet34, vgg11_bn
+from torchvision.models import resnet18, resnet34, vgg11_bn, VGG11_BN_Weights, ResNet18_Weights, ResNet34_Weights
 
 from evaluator import evaluate_model
 from sgd import SGD
@@ -39,21 +39,31 @@ def initialize_population(population_size):
 def selection(population, fitness_scores):
     total_fitness = sum(fitness_scores)
     selection_probabilities = [fitness / total_fitness for fitness in fitness_scores]
-    selected_idx = np.random.choice(len(population), p=selection_probabilities)
-    return population[selected_idx]
+
+    parents = []
+    for _ in range(2):
+        selected_idx = np.random.choice(len(population), p=selection_probabilities)
+        parents.append(population[selected_idx])
+
+    return parents
 
 
-def crossover(parent1, parent2):
-    crossover_point = random.randint(1, len(parent1.hidden_layer_neurons))
-    offspring1_hidden_layer_neurons = parent1.hidden_layer_neurons[:crossover_point] + parent2.hidden_layer_neurons[
-                                                                                       crossover_point:]
-    offspring2_hidden_layer_neurons = parent2.hidden_layer_neurons[:crossover_point] + parent1.hidden_layer_neurons[
-                                                                                       crossover_point:]
-
-    offspring1 = Chromosome(parent1.feature_extractor, parent1.n_hidden_layers, offspring1_hidden_layer_neurons,
+def crossover(parent1, parent2, crossover_prob=0.5):
+    offspring1 = Chromosome(parent1.feature_extractor, parent1.n_hidden_layers, parent1.hidden_layer_neurons.copy(),
                             parent1.activation_function)
-    offspring2 = Chromosome(parent2.feature_extractor, parent2.n_hidden_layers, offspring2_hidden_layer_neurons,
+    offspring2 = Chromosome(parent2.feature_extractor, parent2.n_hidden_layers, parent2.hidden_layer_neurons.copy(),
                             parent2.activation_function)
+
+    if random.random() < crossover_prob:
+        offspring1.feature_extractor, offspring2.feature_extractor = offspring2.feature_extractor, offspring1.feature_extractor
+
+    if random.random() < crossover_prob:
+        offspring1.n_hidden_layers, offspring2.n_hidden_layers = offspring2.n_hidden_layers, offspring1.n_hidden_layers
+        offspring1.hidden_layer_neurons, offspring2.hidden_layer_neurons = offspring2.hidden_layer_neurons, offspring1.hidden_layer_neurons
+
+    if random.random() < crossover_prob:
+        offspring1.activation_function, offspring2.activation_function = offspring2.activation_function, offspring1.activation_function
+
     return offspring1, offspring2
 
 
@@ -81,6 +91,9 @@ def run_evolutionary_algorithm(population_size, n_generations, n_executions, tra
             for chromosome in population
         ]
 
+        for idx, chromosome in enumerate(population):
+            log(chromosome, generation, idx, fitness_scores[idx])
+
         new_population = []
         while len(new_population) < population_size:
             parents = selection(population, fitness_scores)
@@ -106,11 +119,11 @@ def build_and_train(chromosome, train_loader):
     n_classes = len(train_loader.dataset.classes)
 
     if chromosome.feature_extractor == '18resnet':
-        feature_extractor = resnet18(pretrained=True)
+        feature_extractor = resnet18(weights=ResNet18_Weights.IMAGENET1K_V1)
     elif chromosome.feature_extractor == '34resnet':
-        feature_extractor = resnet34(pretrained=True)
+        feature_extractor = resnet34(weights=ResNet34_Weights.IMAGENET1K_V1)
     else:
-        feature_extractor = vgg11_bn(pretrained=True)
+        feature_extractor = vgg11_bn(weights=VGG11_BN_Weights.IMAGENET1K_V1)
 
     if "resnet" in chromosome.feature_extractor:
         n_features = feature_extractor.fc.in_features
@@ -133,7 +146,7 @@ def build_and_train(chromosome, train_loader):
 
     model = CustomModel(layers=layers)
     optimizer = SGD(learning_rate=0.001)
-    epochs = 1
+    epochs = 5
     train_model(model, optimizer, feature_extractor, train_loader, epochs, n_classes)
 
     return model, feature_extractor
@@ -148,13 +161,22 @@ def evaluate_fitness(chromosome, train_loader, test_loader):
 def main():
     population_size = 10
     n_generations = 10
-    n_executions = 1
-    train_loader, test_loader = load_data(batch_size=500)
+    n_executions = 5
+    train_loader, test_loader = load_data(batch_size=100)
     best_chromosome = run_evolutionary_algorithm(population_size, n_generations, n_executions, train_loader,
                                                  test_loader)
     model, feature_extractor = build_and_train(best_chromosome, train_loader)
     evaluate_model(model, feature_extractor, train_loader, "training")
     evaluate_model(model, feature_extractor, test_loader, "testing")
+
+
+def log(chromosome, generation, execution, accuracy):
+    print(f"\nGeneration: {generation}, Execution: {execution}")
+    print(f"Feature Extractor: {chromosome.feature_extractor}")
+    print(f"Number of Hidden Layers: {chromosome.n_hidden_layers}")
+    print(f"Hidden Layer Neurons: {chromosome.hidden_layer_neurons}")
+    print(f"Activation Function: {chromosome.activation_function}")
+    print(f"Accuracy: {accuracy}\n")
 
 
 if __name__ == '__main__':

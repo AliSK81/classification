@@ -32,6 +32,6 @@ def evaluate_model(model, feature_extractor, data_loader, evaluation_name):
 
     accuracy = accuracy_score(y_true_all, y_predict_all)
     f1 = f1_score(y_true_all, y_predict_all, average='macro')
-    print(f'{evaluation_name} Accuracy: {accuracy}')
+    print(f'\n{evaluation_name} Accuracy: {accuracy}')
     print(f'{evaluation_name} F1 Score: {f1}')
     return accuracy
