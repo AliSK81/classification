@@ -18,7 +18,7 @@ transform = transforms.Compose([
 train_data = datasets.CIFAR10('data', train=True, download=True, transform=transform)
 test_data = datasets.CIFAR10('data', train=False, download=True, transform=transform)
 
-train_loader = DataLoader(train_data, batch_size=64, shuffle=True)
+train_loader = DataLoader(train_data, batch_size=16, shuffle=True)
 
 # Define the feature extractor
 feature_extractor = resnet34(pretrained=True)
@@ -62,7 +62,7 @@ class ReLU:
         return np.maximum(0, inputs)
 
     def backward(self, b_input):
-        return b_input * (self.inputs > 0)
+        return b_input * (self.inputs > 0).astype(int)
 
 
 class Sigmoid:
@@ -80,16 +80,18 @@ class Softmax:
         return exp_vals / np.sum(exp_vals, axis=1, keepdims=True)
 
     def backward(self, b_input, y_true):
-        return b_input - y_true
+        batch_size = b_input.shape[0]
+        return (b_input - y_true) / batch_size
 
 
 class CategoricalCrossEntropyLoss:
     def forward(self, y_pred, y_true):
         batch_size = y_pred.shape[0]
-        return -np.sum(y_true * np.log(y_pred)) / batch_size
+        return -np.sum(y_true * np.log(y_pred + 1e-9)) / batch_size
 
     def backward(self, y_pred, y_true):
-        return y_pred - y_true
+        batch_size = y_pred.shape[0]
+        return (y_pred - y_true) / batch_size
 
 
 class SGD:
