@@ -55,11 +55,22 @@ class ReLU:
 class Softmax:
     def forward(self, inputs):
         exp_vals = np.exp(inputs - np.max(inputs, axis=1, keepdims=True))
-        return exp_vals / np.sum(exp_vals, axis=1, keepdims=True)
+        self.output = exp_vals / np.sum(exp_vals, axis=1, keepdims=True)
+        return self.output
 
-    def backward(self, d_outputs, y_true):
-        batch_size = d_outputs.shape[0]
-        return (d_outputs - y_true) / batch_size
+    def backward(self, b_input, y_true):
+        batch_size = b_input.shape[0]
+        jacobian_matrix = np.zeros((batch_size, b_input.shape[1], b_input.shape[1]))
+        for i in range(batch_size):
+            for j in range(b_input.shape[1]):
+                for k in range(b_input.shape[1]):
+                    if j == k:
+                        jacobian_matrix[i][j][k] = self.output[i][j] * (1 - self.output[i][k])
+                    else:
+                        jacobian_matrix[i][j][k] = -self.output[i][j] * self.output[i][k]
+
+        self.b_output = np.matmul(b_input[:, np.newaxis, :], jacobian_matrix).squeeze()
+        return self.b_output
 
 
 class CategoricalCrossEntropyLoss:
@@ -68,8 +79,10 @@ class CategoricalCrossEntropyLoss:
         return -np.sum(y_true * np.log(y_pred + 1e-9)) / batch_size
 
     def backward(self, y_pred, y_true):
-        batch_size = y_pred.shape[0]
-        return (y_pred - y_true) / batch_size
+        # batch_size = y_pred.shape[0]
+        # return (y_pred - y_true) / batch_size
+        self.b_output = - y_true / y_pred
+        return self.b_output
 
 
 class SGD:
