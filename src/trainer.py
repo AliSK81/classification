@@ -5,7 +5,7 @@ from tqdm import tqdm
 from src.dense import Dense
 
 
-def train_model(model, optimizer, feature_extractor, train_loader, epochs):
+def train_model(model, optimizer, feature_extractor, train_loader, epochs, n_classes):
     for epoch in range(epochs):
         feature_extractor.eval()
 
@@ -16,7 +16,7 @@ def train_model(model, optimizer, feature_extractor, train_loader, epochs):
                 x_train = features.numpy()
                 y_train = labels.numpy()
 
-                y_1hot = np.eye(model.n_classes)[y_train]
+                y_1hot = np.eye(n_classes)[y_train]
 
                 # forward
                 outputs = model.forward(x_train)
