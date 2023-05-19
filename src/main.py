@@ -18,10 +18,8 @@ transform = transforms.Compose([
     transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))
 ])
 
-train_data = datasets.CIFAR10('data', train=True,
-                              download=True, transform=transform)
-test_data = datasets.CIFAR10('data', train=False,
-                             download=True, transform=transform)
+train_data = datasets.CIFAR10('data', train=True, download=False, transform=transform)
+test_data = datasets.CIFAR10('data', train=False, download=False, transform=transform)
 
 train_loader = DataLoader(train_data, batch_size=64, shuffle=True)
 
@@ -47,8 +45,8 @@ with torch.no_grad():
         y_train.append(labels)
 
     features_train = torch.cat(features_list, dim=0)
-    x_train = torch.stack(features_list).numpy()
 
+x_train = features_train.numpy()
 y_train = torch.cat(y_train, dim=0).numpy()
 
 
@@ -65,9 +63,7 @@ class Dense:
         self.f_output = np.dot(inputs, self.weights) + self.biases
 
     def backward(self, b_input):
-        b_input_reshaped = np.squeeze(b_input, axis=0)
-        inputs_reshaped = np.squeeze(self.inputs.T, axis=2)
-        self.weights = np.dot(inputs_reshaped, b_input_reshaped)
+        self.weights = np.dot(self.inputs.T, b_input)
         self.biases = np.sum(b_input, axis=0, keepdims=True)
         self.b_output = np.dot(b_input, self.weights.T)
 
@@ -117,9 +113,8 @@ class Categorical_Cross_Entropy_loss:
         self.b_output = None
 
     def forward(self, softmax_output, class_label):
-        softmax_output = np.clip(softmax_output, 1e-7, 1.0 - 1e-7)
-
-        num_samples = softmax_output.shape[0]
+        softmax_output = softmax_output
+        num_samples = softmax_output.shape[1]
         self.value = -np.sum(class_label * np.log(softmax_output)) / num_samples
 
     def backward(self, softmax_output, class_label):
