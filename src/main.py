@@ -7,7 +7,8 @@ from sklearn.metrics import confusion_matrix
 from torch import nn
 from torch.utils.data import DataLoader
 from torchvision import datasets
-from torchvision.models import resnet34
+from torchvision.models import resnet34, ResNet34_Weights
+from tqdm import tqdm
 
 transform = transforms.Compose([
     transforms.ToTensor(),
@@ -21,7 +22,7 @@ train_loader = torch.utils.data.DataLoader(train_data, batch_size=100, shuffle=T
 test_loader = torch.utils.data.DataLoader(test_data, batch_size=100, shuffle=False)
 
 # Define the feature extractor
-feature_extractor = resnet34(pretrained=True)
+feature_extractor = resnet34(weights=ResNet34_Weights.IMAGENET1K_V1)
 num_features = feature_extractor.fc.in_features
 feature_extractor.fc = nn.Identity()
 
@@ -100,9 +101,10 @@ num_classes = 10
 
 # Main Loop of Training
 for epoch in range(20):
-
     feature_extractor.eval()
-    with torch.no_grad():
+
+    with torch.no_grad(), tqdm(total=len(train_loader), desc=f'Epoch {epoch}', unit='batch') as pbar:
+
         for images, labels in train_loader:
             features = feature_extractor(images)
 
@@ -118,14 +120,6 @@ for epoch in range(20):
             Act2.forward(Layer2.output)
             loss = Loss.forward(Act2.output, y_1hot)
 
-            # Report
-            y_predict = np.argmax(Act2.output, axis=1)
-            accuracy = np.mean(y_train == y_predict)
-            print(f'Epoch:{epoch}')
-            print(f'Loss: {loss}')
-            print(f'Accuracy: {accuracy}')
-            print('--------------------------')
-
             # backward
             Loss.backward(Act2.output, y_1hot)
             Act2.backward(Loss.b_output)
@@ -136,6 +130,17 @@ for epoch in range(20):
             # update params
             Optimizer.update(Layer1)
             Optimizer.update(Layer2)
+
+            # Update the progress bar
+            pbar.update(1)
+
+        # Report
+        y_predict = np.argmax(Act2.output, axis=1)
+        accuracy = np.mean(y_train == y_predict)
+        print(f'Epoch:{epoch}')
+        print(f'Loss: {loss}')
+        print(f'Accuracy: {accuracy}')
+        print('--------------------------')
 
 feature_extractor.eval()
 with torch.no_grad():
