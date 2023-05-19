@@ -133,7 +133,7 @@ def build_and_train(chromosome, train_loader):
 
     model = CustomModel(layers=layers)
     optimizer = SGD(learning_rate=0.001)
-    epochs = 5
+    epochs = 1
     train_model(model, optimizer, feature_extractor, train_loader, epochs, n_classes)
 
     return model, feature_extractor
@@ -148,8 +148,8 @@ def evaluate_fitness(chromosome, train_loader, test_loader):
 def main():
     population_size = 10
     n_generations = 10
-    n_executions = 5
-    train_loader, test_loader = load_data(batch_size=100)
+    n_executions = 1
+    train_loader, test_loader = load_data(batch_size=500)
     best_chromosome = run_evolutionary_algorithm(population_size, n_generations, n_executions, train_loader,
                                                  test_loader)
     model, feature_extractor = build_and_train(best_chromosome, train_loader)
