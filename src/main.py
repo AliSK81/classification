@@ -57,18 +57,13 @@ class Softmax:
         return self.output
 
     def backward(self, b_input):
-        # self.b_output = b_input.copy()
-        batch_size = b_input.shape[0]
-        jacobian_matrix = np.zeros((batch_size, b_input.shape[1], b_input.shape[1]))
-        for i in range(batch_size):
-            for j in range(b_input.shape[1]):
-                for k in range(b_input.shape[1]):
-                    if j == k:
-                        jacobian_matrix[i][j][k] = self.output[i][j] * (1 - self.output[i][k])
-                    else:
-                        jacobian_matrix[i][j][k] = -self.output[i][j] * self.output[i][k]
+        num_classes = b_input.shape[1]
 
-        self.b_output = np.matmul(b_input[:, np.newaxis, :], jacobian_matrix).squeeze()
+        jacobian_matrix = -self.output[:, :, np.newaxis] * self.output[:, np.newaxis, :]
+        identity = np.eye(num_classes)
+        jacobian_matrix += identity[np.newaxis, :, :] * self.output[:, np.newaxis, :]
+
+        self.b_output = np.einsum('bij,bj->bi', jacobian_matrix, b_input)
 
 
 class CategoricalCrossEntropyLoss:
