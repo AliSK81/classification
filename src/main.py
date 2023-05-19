@@ -18,7 +18,7 @@ def main():
     model = CustomModel(n_features=n_features, n_classes=len(train_loader.dataset.classes))
     optimizer = SGD(learning_rate=0.001)
 
-    epochs = 1
+    epochs = 5
     train_model(model, optimizer, feature_extractor, train_loader, epochs)
     evaluate_model(model, feature_extractor, train_loader, "training")
     evaluate_model(model, feature_extractor, test_loader, "testing")
