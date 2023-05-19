@@ -18,7 +18,7 @@ transform = transforms.Compose([
 train_data = datasets.CIFAR10('data', train=True, download=True, transform=transform)
 test_data = datasets.CIFAR10('data', train=False, download=True, transform=transform)
 
-train_loader = DataLoader(train_data, batch_size=16, shuffle=True)
+train_loader = DataLoader(train_data, batch_size=256, shuffle=True)
 
 # Define the feature extractor
 feature_extractor = resnet34(pretrained=True)
@@ -33,7 +33,6 @@ with torch.no_grad():
         features = feature_extractor(images)
         features_list.append(features)
         labels_list.append(labels)
-        break
 
 x_train = torch.cat(features_list, dim=0).numpy()
 y_train = torch.cat(labels_list, dim=0).numpy()
@@ -48,10 +47,10 @@ class Dense:
         self.inputs = inputs
         return np.dot(inputs, self.weights) + self.biases
 
-    def backward(self, b_input):
-        d_weights = np.dot(self.inputs.T, b_input)
-        d_biases = np.sum(b_input, axis=0, keepdims=True)
-        d_inputs = np.dot(b_input, self.weights.T)
+    def backward(self, d_outputs):
+        d_weights = np.dot(self.inputs.T, d_outputs)
+        d_biases = np.sum(d_outputs, axis=0, keepdims=True)
+        d_inputs = np.dot(d_outputs, self.weights.T)
 
         return d_weights, d_biases, d_inputs
 
@@ -61,17 +60,8 @@ class ReLU:
         self.inputs = inputs
         return np.maximum(0, inputs)
 
-    def backward(self, b_input):
-        return b_input * (self.inputs > 0).astype(int)
-
-
-class Sigmoid:
-    def __init__(self):
-        self.output = None
-        self.b_output = None
-
-    def forward(self, inputs):
-        self.output = 1 / (1 + np.exp(-inputs))
+    def backward(self, d_outputs):
+        return d_outputs * (self.inputs > 0).astype(int)
 
 
 class Softmax:
@@ -79,9 +69,9 @@ class Softmax:
         exp_vals = np.exp(inputs - np.max(inputs, axis=1, keepdims=True))
         return exp_vals / np.sum(exp_vals, axis=1, keepdims=True)
 
-    def backward(self, b_input, y_true):
-        batch_size = b_input.shape[0]
-        return (b_input - y_true) / batch_size
+    def backward(self, d_outputs, y_true):
+        batch_size = d_outputs.shape[0]
+        return (d_outputs - y_true) / batch_size
 
 
 class CategoricalCrossEntropyLoss:
